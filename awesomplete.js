@@ -16,6 +16,8 @@ var _ = function (input, o) {
 	this.input.setAttribute("autocomplete", "off");
 	this.input.setAttribute("aria-autocomplete", "list");
 
+	this.lastNoResultEvaluated = "";
+
 	o = o || {};
 
 	configure(this, {
@@ -24,7 +26,7 @@ var _ = function (input, o) {
 		autoFirst: false,
 		data: _.DATA,
 		filter: _.FILTER_CONTAINS,
-		sort: _.SORT_BYLENGTH,
+		sort: o.sort === false ? false : _.SORT_BYLENGTH,
 		item: _.ITEM,
 		replace: _.REPLACE
 	}, o);
@@ -54,7 +56,7 @@ var _ = function (input, o) {
 	// Bind events
 
 	$.bind(this.input, {
-		"input": this.evaluate.bind(this),
+		"input": debounce( this.evaluate, 500 ).bind(this),
 		"blur": this.close.bind(this, { reason: "blur" }),
 		"keydown": function(evt) {
 			var c = evt.keyCode;
@@ -134,7 +136,7 @@ _.prototype = {
 		}
 
 		if (document.activeElement === this.input) {
-			this.evaluate();
+			debounce( this.evaluate, 500 );
 		}
 	},
 
@@ -233,21 +235,39 @@ _.prototype = {
 			// Populate list with options that match
 			this.ul.innerHTML = "";
 
-			this.suggestions = this._list
-				.map(function(item) {
-					return new Suggestion(me.data(item, value));
-				})
-				.filter(function(item) {
-					return me.filter(item, value);
-				})
-				.sort(this.sort)
-				.slice(0, this.maxItems);
-
+			this.suggestions = [];
+			if ( "" == this.lastNoResultEvaluated || ! value.startsWith( this.lastNoResultEvaluated ) ) {
+				if ( this.sort !== false ) {
+					this.suggestions = this._list
+						.map(function(item) {
+							return new Suggestion(me.data(item, value));
+						})
+						.filter(function(item) {
+							return me.filter(item, value);
+						})
+						.sort(this.sort)
+						.slice(0, this.maxItems);
+				} else {
+					var temp = this._list
+						.map(function(item) {
+							return new Suggestion(me.data(item, value));
+						});
+					for ( item in temp ) {
+						if ( me.filter(temp[item], value ) ) {
+							this.suggestions.push( temp[item] );
+							if ( this.suggestions.length === this.maxItems ) {
+								break;
+							}
+						}
+					}
+				}
+			}
 			this.suggestions.forEach(function(text) {
 					me.ul.appendChild(me.item(text, value));
 				});
 
 			if (this.ul.children.length === 0) {
+				this.lastNoResultEvaluated = value;
 				this.close({ reason: "nomatches" });
 			} else {
 				this.open();
@@ -337,6 +357,26 @@ function configure(instance, properties, o) {
 // Helpers
 
 var slice = Array.prototype.slice;
+
+// Debounce Function.
+// Returns a function, that, as long as it continues to be invoked, will not
+// be triggered. The function will be called after it stops being called for
+// N milliseconds. If `immediate` is passed, trigger the function on the
+// leading edge, instead of the trailing.
+function debounce(func, wait, immediate) {
+	var timeout;
+	return function() {
+		var context = this, args = arguments;
+		var later = function() {
+			timeout = null;
+			if (!immediate) func.apply(context, args);
+		};
+		var callNow = immediate && !timeout;
+		clearTimeout(timeout);
+		timeout = setTimeout(later, wait);
+		if (callNow) func.apply(context, args);
+	};
+};
 
 function $(expr, con) {
 	return typeof expr === "string"? (con || document).querySelector(expr) : expr || null;
