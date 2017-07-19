@@ -252,9 +252,10 @@ _.prototype = {
 						.map(function(item) {
 							return new Suggestion(me.data(item, value));
 						});
-					for ( item in temp ) {
-						if ( me.filter(temp[item], value ) ) {
-							this.suggestions.push( temp[item] );
+					var temp_len = temp.length;
+					for ( var i=0; i<temp_len; i++ ) {
+						if ( me.filter(temp[i], value ) ) {
+							this.suggestions.push( temp[i] );
 							if ( this.suggestions.length === this.maxItems ) {
 								break;
 							}
